@@ -15,6 +15,7 @@ using System.Data.SqlClient;
 using System.Collections.Generic;
 using System.Diagnostics.Metrics;
 using System.Data;
+using System.Globalization;
 
 namespace ArduinoDatalogger
 {
@@ -22,37 +23,39 @@ namespace ArduinoDatalogger
     {
         [FunctionName("ArduinoDatalogger")]
         public static async Task<IActionResult> Run(
-            [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req,
-            ILogger log)
+            [HttpTrigger(AuthorizationLevel.Anonymous, "get", "post", Route = null)] HttpRequest req)
         {
-            log.LogInformation("C# HTTP trigger function processed a request.");
 
             string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
             ArduinoLog data = JsonConvert.DeserializeObject<ArduinoLog>(requestBody);
 
             _=WriteToDatabase(data);
 
-            return new OkObjectResult("completed");
+            return new OkObjectResult("Completed");
         }
 
         
         public static Task WriteToDatabase(ArduinoLog ALog)
         {
-            using (SqlConnection connection = new SqlConnection(Environment.GetEnvironmentVariable("ArduinoDatalogger_sqldb_connection")))
+            using (SqlConnection connection = new(Environment.GetEnvironmentVariable("ArduinoDatalogger_sqldb_connection")))
             {
                 connection.Open();
-                SqlCommand command = new SqlCommand(null, connection);
-
-                // Create and prepare an SQL statement.
-                command.CommandText =
-                    "INSERT INTO LOGS (DeviceID, LogId, CurrentA, CurrentB, CurrentC, VoltageAB, VoltageBC, VoltageCA, VoltageAN, VoltageBN, VoltageCN, ActivePowerA, ActivePowerB, ActivePowerC, ActivePowerTotal, ReactivePowerA, ReactivePowerB, ReactivePowerC, ReactivePowerTotal, Frequency, PowerFactorTotal) " +
-                    "VALUES (@DeviceID, @LogId, @CurrentA, @CurrentB, @CurrentC, @VoltageAB, @VoltageBC, @VoltageCA, @VoltageAN, @VoltageBN, @VoltageCN, @ActivePowerA, @ActivePowerB, @ActivePowerC, @ActivePowerTotal, @ReactivePowerA, @ReactivePowerB, @ReactivePowerC, @ReactivePowerTotal, @Frequency, @PowerFactorTotal)";
+                SqlCommand command = new(null, connection)
+                {
+                    // Create and prepare an SQL statement.
+                    CommandText =
+                    "INSERT INTO LOGS (DeviceID, LogId, Timestamp, CurrentA, CurrentB, CurrentC, VoltageAB, VoltageBC, VoltageCA, VoltageAN, VoltageBN, VoltageCN, ActivePowerA, ActivePowerB, ActivePowerC, ActivePowerTotal, ReactivePowerA, ReactivePowerB, ReactivePowerC, ReactivePowerTotal, Frequency, PowerFactorTotal) " +
+                    "VALUES (@DeviceID, @LogId, @Timestamp, @CurrentA, @CurrentB, @CurrentC, @VoltageAB, @VoltageBC, @VoltageCA, @VoltageAN, @VoltageBN, @VoltageCN, @ActivePowerA, @ActivePowerB, @ActivePowerC, @ActivePowerTotal, @ReactivePowerA, @ReactivePowerB, @ReactivePowerC, @ReactivePowerTotal, @Frequency, @PowerFactorTotal)"
+                };
 
                 command.Parameters.Add("@DeviceID", SqlDbType.VarChar,10);
                 command.Parameters["@DeviceID"].Value = ALog.DeviceID;
 
                 command.Parameters.Add("@LogId", SqlDbType.UniqueIdentifier);
                 command.Parameters["@LogId"].Value = Guid.NewGuid();
+
+                command.Parameters.Add("@Timestamp", SqlDbType.DateTime,20);
+                command.Parameters["@Timestamp"].Value = DateTime.Parse(ALog.Timestamp);
 
                 command.Parameters.Add("@CurrentA", SqlDbType.VarChar, 10);
                 command.Parameters["@CurrentA"].Value = ALog.CurrentA;
@@ -121,6 +124,7 @@ namespace ArduinoDatalogger
     public class ArduinoLog
     {
         public int DeviceID { get; set; }
+        public string Timestamp { get; set; }
         public float CurrentA { get; set; }
         public float CurrentB { get; set; }
         public float CurrentC { get; set; }
